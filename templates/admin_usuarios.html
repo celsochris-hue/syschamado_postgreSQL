@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block titulo %}Administração de Usuários{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+    <h1>Administração de Usuários</h1>
+    <a href="{{ url_for('index') }}" class="link-voltar">&larr; Voltar para os chamados</a>
+</div>
+
+<div class="tabela-wrapper">
+    <table class="tabela">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>E-mail</th>
+                <th>Papel</th>
+                <th>Status</th>
+                <th>Criado em</th>
+                <th>Chamados abertos</th>
+                <th class="col-acoes">Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for usuario in usuarios %}
+            <tr>
+                <td class="titulo-cell">{{ usuario.nome }}{% if usuario.id == current_user.id %} <span class="tag-voce">(você)</span>{% endif %}</td>
+                <td>{{ usuario.email }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('admin_alterar_papel', user_id=usuario.id) }}" class="form-inline">
+                        <select name="papel" onchange="this.form.submit()" class="select-compacto" {{ 'disabled' if usuario.id == current_user.id }}>
+                            {% for opcao in papel_opcoes %}
+                            <option value="{{ opcao }}" {{ 'selected' if usuario.papel == opcao }}>{{ opcao }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                </td>
+                <td>
+                    {% if usuario.ativo %}
+                        <span class="badge badge-encerrado">Ativo</span>
+                    {% else %}
+                        <span class="badge badge-suspenso">Desativado</span>
+                    {% endif %}
+                </td>
+                <td>{{ usuario.data_criacao.strftime('%d/%m/%Y') if usuario.data_criacao else '-' }}</td>
+                <td>{{ usuario.chamados_criados|length }}</td>
+                <td class="col-acoes">
+                    <form method="post" action="{{ url_for('admin_alternar_status', user_id=usuario.id) }}" class="form-inline">
+                        <button type="submit" class="btn btn-secundario btn-pequeno" {{ 'disabled' if usuario.id == current_user.id }}>
+                            {{ 'Desativar' if usuario.ativo else 'Ativar' }}
+                        </button>
+                    </form>
+                    <form method="post" action="{{ url_for('admin_excluir_usuario', user_id=usuario.id) }}" class="form-inline" onsubmit="return confirm('Excluir permanentemente esta conta?');">
+                        <button type="submit" class="btn btn-perigo btn-pequeno" {{ 'disabled' if usuario.id == current_user.id }}>Excluir</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p class="texto-vazio" style="margin-top: 14px;">
+    Apenas usuários com papel <strong>técnico</strong> ou <strong>admin</strong> podem ser designados
+    como responsáveis por um chamado. Contas com chamados vinculados não podem ser excluídas — apenas desativadas.
+</p>
+{% endblock %}

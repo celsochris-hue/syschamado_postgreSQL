@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entrar - Sistema de Chamados</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="pagina-auth">
+    <div class="auth-wrapper">
+        <div class="auth-card">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Marista" class="auth-logo-img">
+            <h1 class="auth-logo">Sistema de Chamados</h1>
+            <p class="auth-subtitulo">Entre com sua conta para continuar</p>
+
+            {% with mensagens = get_flashed_messages(with_categories=true) %}
+                {% if mensagens %}
+                    <div class="flash-wrapper">
+                        {% for categoria, mensagem in mensagens %}
+                            <div class="flash flash-{{ categoria }}">{{ mensagem }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <form method="post" class="formulario">
+                <div class="campo">
+                    <label for="email">E-mail</label>
+                    <input type="email" id="email" name="email" required autofocus>
+                </div>
+                <div class="campo">
+                    <label for="senha">Senha</label>
+                    <input type="password" id="senha" name="senha" required>
+                </div>
+                <button type="submit" class="btn btn-primario btn-full">Entrar</button>
+            </form>
+
+            <p class="auth-rodape">
+                Ainda não tem conta? <a href="{{ url_for('registrar') }}">Criar conta</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
