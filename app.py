@@ -5,6 +5,15 @@ import string
 from functools import wraps
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import socket
+
+# Força o Python a priorizar conexões IPv4 em conexões de rede (resolve o Errno 101 no Render)
+old_getaddrinfo = socket.getaddrinfo
+def new_getaddrinfo(*args, **kwargs):
+    responses = old_getaddrinfo(*args, **kwargs)
+    return [response for response in responses if response[0] == socket.AF_INET]
+
+socket.getaddrinfo = new_getaddrinfo
 
 try:
     from dotenv import load_dotenv
