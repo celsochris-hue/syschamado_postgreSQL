@@ -30,7 +30,7 @@ def enviar_email(app, destinatario, assunto, corpo_html):
 
         msg.attach(MIMEText(corpo_html, "html", "utf-8"))
 
-        with smtplib.SMTP(app.config["MAIL_SERVER"], app.config["MAIL_PORT"], timeout=10) as servidor:
+        with smtplib.SMTP(app.config["MAIL_SERVER"], app.config["MAIL_PORT"], timeout=30) as servidor:
             if app.config.get("MAIL_USE_TLS"):
                 servidor.starttls()
             if app.config.get("MAIL_USERNAME"):
