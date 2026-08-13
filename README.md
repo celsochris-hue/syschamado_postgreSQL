@@ -8,6 +8,10 @@ e **exportação de relatórios em Excel e PDF**.
 ## Funcionalidades
 
 - **Login de usuários** com senha (criptografada), cadastro de conta e sessão protegida
+- **Recuperação de senha por e-mail** ("Esqueci minha senha") e troca de senha pelo próprio usuário
+- **Controle de acesso por papel**: usuários com papel "usuario" só visualizam e consultam
+  os chamados que eles próprios abriram; técnicos e administradores continuam vendo e
+  gerenciando todos os chamados normalmente
 - **Painel de administração** (`/admin/usuarios`) para gerenciar contas: alterar papel
   (usuário/técnico/admin), ativar/desativar e excluir usuários
 - **Atribuição de chamados a um técnico responsável**, com notificação automática por e-mail
@@ -37,9 +41,12 @@ chamados/
 ├── .env.example              # Modelo de variáveis de ambiente (copie para .env)
 ├── templates/
 │   ├── base.html             # Layout principal (com barra de usuário/logout)
-│   ├── login.html            # Tela de login
+│   ├── login.html            # Tela de login (com link "Esqueci minha senha")
 │   ├── registrar.html        # Tela de criação de conta
-│   ├── index.html            # Listagem de chamados
+│   ├── esqueci_senha.html    # Tela de recuperação de senha
+│   ├── alterar_senha.html    # Tela de troca de senha (usuário logado)
+│   ├── admin_usuarios.html   # Painel de administração de usuários
+│   ├── index.html            # Listagem de chamados (filtrada por papel)
 │   ├── novo.html              # Formulário de novo chamado
 │   └── detalhe.html           # Detalhe do chamado, status, anexos e histórico
 ├── static/
@@ -147,27 +154,61 @@ Isso cria dois usuários de teste:
 
 e três chamados de exemplo (um de cada status, um já atribuído ao técnico de teste).
 
-## Papéis de usuário e atribuição de chamados
+## Papéis de usuário e permissões
 
-O sistema tem três papéis:
+O sistema tem três papéis, com regras de acesso diferentes:
 
-- **usuario** — pode abrir chamados, ver a lista, alterar status e exportar relatórios
-- **tecnico** — mesmas permissões de `usuario`, e pode ser selecionado como responsável
-  por um chamado
-- **admin** — todas as permissões acima, mais acesso ao painel `/admin/usuarios`
+### usuario (papel padrão)
+- Pode **abrir novos chamados** normalmente (com anexos de evidência)
+- Visualiza **somente os chamados que ele próprio cadastrou** — não vê chamados abertos
+  por outras pessoas, nem na listagem nem tentando acessar o link direto (`/chamado/<id>`)
+- Na tela de detalhe do próprio chamado, pode **apenas consultar**: status atual, histórico
+  de atualizações e baixar os anexos já enviados
+- **Não pode**: alterar o status, atribuir um técnico responsável, adicionar novos anexos
+  após a criação, nem excluir o chamado — essas ações ficam visíveis apenas para técnicos
+  e administradores
+- A exportação em Excel/PDF (lista e individual) também respeita esse escopo: só inclui
+  os próprios chamados
+
+### tecnico
+- Mesmas permissões de `usuario`, **mais**: visualiza **todos** os chamados de todos os
+  usuários, pode alterar status, adicionar anexos, atribuir responsável e excluir chamados
+- Pode ser selecionado como responsável por um chamado
+
+### admin
+- Todas as permissões de `tecnico`, mais acesso ao painel `/admin/usuarios`
+
+> Em resumo: **apenas `tecnico` e `admin` enxergam e gerenciam todos os chamados**. O
+> papel `usuario` fica restrito aos próprios chamados, em modo de leitura após a abertura.
 
 O **primeiro usuário cadastrado no sistema vira administrador automaticamente**. A partir
 daí, o admin acessa **"Administração"** no topo da página para:
 
 - Alterar o papel de qualquer usuário (ex: promover alguém a "técnico" para que ele possa
-  receber chamados atribuídos)
+  ver todos os chamados e receber atribuições)
 - Ativar ou desativar contas (uma conta desativada não consegue mais fazer login)
 - Excluir contas que nunca tiveram chamados, atribuições ou alterações de status vinculadas
   (caso contrário, o sistema pede para desativar em vez de excluir, preservando o histórico)
 
-Na tela de detalhe de cada chamado, qualquer usuário logado pode atribuir (ou remover) um
-técnico responsável através do menu **"Responsável Técnico"**. Ao atribuir, o técnico
+Na tela de detalhe de cada chamado, técnicos e administradores podem atribuir (ou remover)
+um técnico responsável através do menu **"Responsável Técnico"**. Ao atribuir, o técnico
 recebe um e-mail de notificação (se o envio de e-mail estiver ativado).
+
+## Login: recuperação e alteração de senha
+
+- Na tela de login, o link **"Esqueci minha senha"** leva a uma página onde o usuário
+  informa o e-mail cadastrado.
+- Como as senhas são armazenadas apenas como **hash** (irreversível, por segurança — nunca
+  em texto puro), o sistema **não consegue reenviar a senha original**. Em vez disso, ele
+  gera automaticamente uma **nova senha temporária aleatória**, substitui a senha antiga
+  por ela e envia essa nova senha por e-mail ao usuário.
+- Se o envio de e-mail estiver desativado (`MAIL_ATIVO=False`), a nova senha aparece no
+  **console/terminal** onde o `python app.py` está rodando — útil para testar sem configurar
+  SMTP.
+- A mensagem exibida na tela é sempre a mesma, independentemente de o e-mail existir ou não
+  na base, para não revelar quais e-mails estão cadastrados.
+- Já logado, qualquer usuário pode trocar a própria senha a qualquer momento pelo link
+  **"Alterar senha"** no topo da página (pede a senha atual + a nova senha).
 
 ## Configuração de e-mail (SMTP)
 
@@ -217,7 +258,11 @@ ambiente (via `.env` ou variáveis do sistema):
 - `DATABASE_URL` (se definida, tem prioridade sobre as demais — formato
   `postgresql://usuario:senha@host:porta/nome_do_banco`), **ou**
 - `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_NAME` (usadas para montar a URL de
-  conexão automaticamente)
+  conexão automaticamente, usando `sqlalchemy.engine.URL.create()` — isso garante que
+  caracteres especiais/acentuados na senha ou usuário, como `@`, `:`, `%` ou `ç`, sejam
+  codificados corretamente. Antes essa URL era montada com uma f-string simples, o que
+  podia causar erros de conexão difíceis de diagnosticar, como `UnicodeDecodeError`,
+  quando a senha tinha caracteres não-ASCII)
 
 As tabelas são criadas automaticamente na primeira execução (`db.create_all()`), não é
 necessário rodar nenhum script SQL manualmente. São elas:
@@ -232,6 +277,18 @@ necessário rodar nenhum script SQL manualmente. São elas:
 > os dados **não são migrados automaticamente** — trata-se de um banco novo (PostgreSQL).
 > Rode `python seed.py` para popular com dados de teste, ou cadastre os chamados novamente
 > pela interface.
+
+## Fuso horário
+
+Todas as datas registradas pelo sistema (abertura do chamado, última atualização, upload
+de anexo, histórico de status, criação de conta) usam o **horário de Brasília**
+(`America/Sao_Paulo`), e não UTC. Isso é feito através da função `agora_br()` em `app.py`,
+que já leva em conta automaticamente o horário de verão quando aplicável.
+
+> No Windows, o Python não vem com a base de fusos horários (IANA) embutida — por isso o
+> pacote `tzdata` está no `requirements.txt`. Sem ele, o `zoneinfo` não encontraria
+> `America/Sao_Paulo` e o sistema poderia travar ao abrir um chamado. Ele já é instalado
+> automaticamente com `pip install -r requirements.txt`.
 
 ## Segurança e observações para uso em produção
 

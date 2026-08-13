@@ -6,8 +6,8 @@ Usuário de teste criado:
   E-mail: admin@empresa.com
   Senha:  admin123
 """
-from datetime import datetime, timedelta
-from app import app, db, User, Chamado, HistoricoStatus
+from datetime import timedelta
+from app import app, db, User, Chamado, HistoricoStatus, agora_br
 
 exemplos = [
     {
@@ -67,7 +67,7 @@ with app.app_context():
             setor=dados["setor"],
             prioridade=dados["prioridade"],
             status=dados["status"],
-            data_abertura=datetime.utcnow() - timedelta(days=3 - i),
+            data_abertura=agora_br() - timedelta(days=3 - i),
             usuario_id=admin.id,
             responsavel_id=tecnico.id if i == 1 else None,
         )

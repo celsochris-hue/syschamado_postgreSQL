@@ -78,6 +78,48 @@ def template_status_alterado(chamado, status_anterior, observacao, url_chamado):
     """
 
 
+def template_senha_redefinida(usuario, nova_senha, url_login):
+    """Gera o corpo HTML do e-mail com a nova senha de acesso (fluxo 'esqueci minha senha').
+
+    Observação técnica: a senha original NÃO pode ser recuperada, pois é armazenada
+    apenas como hash (irreversível) no banco de dados — prática padrão de segurança.
+    Por isso, ao solicitar a recuperação, uma nova senha temporária é gerada
+    automaticamente e enviada por e-mail, substituindo a anterior."""
+    return f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; color: #1f2333; background:#f4f5f9; padding: 24px;">
+        <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 10px;
+                    overflow: hidden; border: 1px solid #e4e6ef;">
+            <div style="background: #4f46e5; color: #fff; padding: 18px 24px;">
+                <h2 style="margin:0; font-size: 1.1rem;">Nova senha de acesso</h2>
+            </div>
+            <div style="padding: 24px;">
+                <p>Olá, <strong>{usuario.nome}</strong>!</p>
+                <p>Recebemos uma solicitação de recuperação de senha para sua conta no
+                   Sistema de Chamados. Sua nova senha de acesso é:</p>
+                <p style="font-size: 1.3rem; font-weight: 700; letter-spacing: 1px;
+                          background:#eef0fb; color:#4f46e5; padding:12px 18px;
+                          border-radius:8px; text-align:center;">{nova_senha}</p>
+                <p>Por segurança, recomendamos que você altere essa senha assim que
+                   entrar no sistema, na opção <strong>"Alterar senha"</strong>.</p>
+                <p style="margin-top: 24px;">
+                    <a href="{url_login}" style="background:#4f46e5; color:#fff; padding:10px 18px;
+                       border-radius:8px; text-decoration:none; font-weight:600;">Fazer login</a>
+                </p>
+                <p style="color:#9ca3af; font-size:0.8rem; margin-top:20px;">
+                    Se você não solicitou essa alteração, entre em contato com o
+                    administrador do sistema o quanto antes.
+                </p>
+            </div>
+            <div style="padding: 14px 24px; background:#fafafe; color:#9ca3af; font-size:0.75rem;">
+                Sistema de Chamados &middot; e-mail automático, não responda.
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+
 def template_chamado_atribuido(chamado, responsavel, url_chamado):
     """Gera o corpo HTML do e-mail avisando o técnico que um chamado foi atribuído a ele."""
     return f"""

@@ -1,0 +1,3 @@
+Corrigido o fuso horário
+Versão do banco de dados em PostgreSQL
+Perfil de usuário ok
