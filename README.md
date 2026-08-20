@@ -148,15 +148,17 @@ cadastrar — o **primeiro usuário criado vira administrador automaticamente**.
 python seed.py
 ```
 
-Isso cria dois usuários de teste:
+Isso cria três usuários de teste:
 - **Admin:** admin@empresa.com / senha `admin123`
 - **Técnico:** tecnico@empresa.com / senha `tecnico123`
+- **RH:** rh@empresa.com / senha `rh123`
 
-e três chamados de exemplo (um de cada status, um já atribuído ao técnico de teste).
+e quatro chamados de exemplo (um de cada status, um já atribuído ao técnico de teste
+e um do RH para validar a visibilidade restrita).
 
 ## Papéis de usuário e permissões
 
-O sistema tem três papéis, com regras de acesso diferentes:
+O sistema tem quatro papéis, com regras de acesso diferentes:
 
 ### usuario (papel padrão)
 - Pode **abrir novos chamados** normalmente (com anexos de evidência)
@@ -165,21 +167,53 @@ O sistema tem três papéis, com regras de acesso diferentes:
 - Na tela de detalhe do próprio chamado, pode **apenas consultar**: status atual, histórico
   de atualizações e baixar os anexos já enviados
 - **Não pode**: alterar o status, atribuir um técnico responsável, adicionar novos anexos
-  após a criação, nem excluir o chamado — essas ações ficam visíveis apenas para técnicos
-  e administradores
+  após a criação, nem excluir o chamado — essas ações ficam visíveis apenas para técnicos,
+  RH e administradores
 - A exportação em Excel/PDF (lista e individual) também respeita esse escopo: só inclui
   os próprios chamados
 
 ### tecnico
 - Mesmas permissões de `usuario`, **mais**: visualiza **todos** os chamados de todos os
-  usuários, pode alterar status, adicionar anexos, atribuir responsável e excluir chamados
+  usuários (exceto os da área de RH, ver abaixo), pode alterar status, adicionar anexos,
+  atribuir responsável e excluir chamados
 - Pode ser selecionado como responsável por um chamado
 
-### admin
-- Todas as permissões de `tecnico`, mais acesso ao painel `/admin/usuarios`
+### rh
+- Mesmas permissões de `tecnico` para chamados fora da área de RH
+- **Visualiza e gerencia exclusivamente os chamados da área de RH** (setor "RH" ou
+  "Recursos Humanos"). Esses chamados ficam invisíveis para os demais perfis, inclusive
+  `tecnico` e `usuario` — só aparecem para `rh` e `admin`
+- Pode ser selecionado como responsável por chamados de RH
 
-> Em resumo: **apenas `tecnico` e `admin` enxergam e gerenciam todos os chamados**. O
-> papel `usuario` fica restrito aos próprios chamados, em modo de leitura após a abertura.
+### admin
+- Todas as permissões de `tecnico` e `rh`, mais acesso ao painel `/admin/usuarios`
+- Único perfil (junto com `rh`) que enxerga os chamados da área de RH
+
+> Em resumo: **chamados fora do RH** são visíveis/gerenciáveis por `tecnico`, `rh` e
+> `admin`. **Chamados do RH** ficam restritos apenas a `rh` e `admin`. O papel
+> `usuario` continua restrito aos próprios chamados, em modo de leitura após a
+> abertura.
+
+## Área de RH — visibilidade restrita
+
+Chamados cujo campo **Setor** seja informado como `RH` ou `Recursos Humanos`
+(case-insensitive) são tratados como **chamados da área de RH** e ficam sujeitos a
+regras especiais:
+
+- Só são exibidos na listagem e nos contadores para perfis `rh` e `admin` — os demais
+  perfis (incluindo `tecnico` e `usuario`) **não veem referência alguma** desses chamados
+- Os PDFs/Excels exportados herdam o mesmo filtro: só incluem chamados de RH quando o
+  solicitante da exportação é `rh` ou `admin`
+- O link direto `/chamado/<id>` também é bloqueado: se um usuário sem permissão tentar
+  acessar, recebe um aviso e é redirecionado
+- As ações de **alterar status, atribuir responsável, adicionar/excluir anexos e excluir
+  o chamado** ficam disponíveis apenas para `rh` e `admin` quando o chamado é do RH —
+  um `tecnico` comum, mesmo autenticado, não consegue executar essas operações
+- A atribuição de responsável em chamados do RH aceita apenas perfis `rh` ou `admin`
+  (técnicos não podem ser designados para chamados de RH)
+
+Para criar um chamado de RH, basta abrir um chamado normalmente e digitar "RH" ou
+"Recursos Humanos" no campo **Setor**. O sistema reconhece automaticamente.
 
 O **primeiro usuário cadastrado no sistema vira administrador automaticamente**. A partir
 daí, o admin acessa **"Administração"** no topo da página para:

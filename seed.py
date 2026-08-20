@@ -37,6 +37,15 @@ exemplos = [
         "prioridade": "Urgente",
         "status": "Encerrado",
     },
+    {
+        "titulo": "Solicitação de férias do colaborador",
+        "descricao": "Gestor solicitou aprovação de férias de 15 dias para colaborador do setor comercial.",
+        "solicitante": "Patrícia Lima",
+        "email_solicitante": "patricia.lima@empresa.com",
+        "setor": "RH",  # setor RH → chamado restrito a perfis 'rh' e 'admin'
+        "prioridade": "Alta",
+        "status": "Aberto",
+    },
 ]
 
 with app.app_context():
@@ -57,6 +66,14 @@ with app.app_context():
         db.session.add(tecnico)
         db.session.flush()
         print("Usuário técnico criado -> login: tecnico@empresa.com | senha: tecnico123")
+
+    rh = User.query.filter_by(email="rh@empresa.com").first()
+    if not rh:
+        rh = User(nome="Renata Borges", email="rh@empresa.com", papel="rh")
+        rh.set_senha("rh123")
+        db.session.add(rh)
+        db.session.flush()
+        print("Usuário RH criado -> login: rh@empresa.com | senha: rh123")
 
     for i, dados in enumerate(exemplos):
         chamado = Chamado(
