@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block titulo %}Alterar Senha{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+    <h1>Alterar Senha</h1>
+    <a href="{{ url_for('index') }}" class="link-voltar">&larr; Voltar para os chamados</a>
+</div>
+
+<form method="post" class="formulario" style="max-width: 480px;">
+    <div class="campo">
+        <label for="senha_atual">Senha atual</label>
+        <input type="password" id="senha_atual" name="senha_atual" required autofocus>
+    </div>
+    <div class="campo">
+        <label for="nova_senha">Nova senha</label>
+        <input type="password" id="nova_senha" name="nova_senha" required minlength="6">
+        <small>Mínimo de 6 caracteres.</small>
+    </div>
+    <div class="campo">
+        <label for="confirmar_nova_senha">Confirmar nova senha</label>
+        <input type="password" id="confirmar_nova_senha" name="confirmar_nova_senha" required minlength="6">
+    </div>
+    <div class="acoes-formulario">
+        <button type="submit" class="btn btn-primario">Salvar Nova Senha</button>
+        <a href="{{ url_for('index') }}" class="btn btn-cancelar">Cancelar</a>
+    </div>
+</form>
+{% endblock %}

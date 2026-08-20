@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block titulo %}Novo Chamado{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+    <h1>Abrir Novo Chamado</h1>
+    <a href="{{ url_for('index') }}" class="link-voltar">&larr; Voltar para a lista</a>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="formulario">
+    <div class="campo">
+        <label for="titulo">Título *</label>
+        <input type="text" id="titulo" name="titulo" maxlength="150" required value="{{ form.get('titulo', '') }}">
+    </div>
+
+    <div class="linha-dupla">
+        <div class="campo">
+            <label for="solicitante">Solicitante *</label>
+            <input type="text" id="solicitante" name="solicitante" maxlength="120" required value="{{ form.get('solicitante', '') }}">
+        </div>
+        <div class="campo">
+            <label for="setor">Setor / Departamento</label>
+            <input type="text" id="setor" name="setor" maxlength="100" value="{{ form.get('setor', '') }}">
+            <small>Use "RH" ou "Recursos Humanos" para chamados dessa área. Eles ficam visíveis apenas para perfis de RH e administradores.</small>
+        </div>
+    </div>
+
+    <div class="campo">
+        <label for="email_solicitante">E-mail para notificações</label>
+        <input type="email" id="email_solicitante" name="email_solicitante" maxlength="150" value="{{ form.get('email_solicitante', '') }}">
+        <small>Esse e-mail receberá um aviso sempre que o status do chamado for alterado.</small>
+    </div>
+
+    <div class="campo">
+        <label for="prioridade">Prioridade</label>
+        <select id="prioridade" name="prioridade">
+            {% for opcao in prioridade_opcoes %}
+            <option value="{{ opcao }}" {{ 'selected' if form.get('prioridade') == opcao else '' }}>{{ opcao }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="campo">
+        <label for="descricao">Descrição *</label>
+        <textarea id="descricao" name="descricao" rows="6" required placeholder="Descreva o problema ou a demanda com o máximo de detalhes...">{{ form.get('descricao', '') }}</textarea>
+    </div>
+
+    <div class="campo">
+        <label for="anexos">Anexos (evidências)</label>
+        <input type="file" id="anexos" name="anexos" multiple>
+        <small>Formatos aceitos: imagens, PDF, Word, Excel, TXT, CSV, ZIP, LOG, MP4. Máx. 25MB por arquivo.</small>
+    </div>
+
+    <div class="acoes-formulario">
+        <button type="submit" class="btn btn-primario">Abrir Chamado</button>
+        <a href="{{ url_for('index') }}" class="btn btn-cancelar">Cancelar</a>
+    </div>
+</form>
+{% endblock %}

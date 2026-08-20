@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block titulo %}Sistema de Chamados{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="topbar">
+        <div class="container topbar-inner">
+            <a href="{{ url_for('index') }}" class="logo">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Marista" class="logo-img">
+                <span>Sistema de Chamados</span>
+            </a>
+            <div class="topbar-acoes">
+                {% if current_user.is_authenticated and current_user.is_admin() %}
+                <a href="{{ url_for('admin_usuarios') }}" class="link-admin">Administração</a>
+                {% endif %}
+                <a href="{{ url_for('novo_chamado') }}" class="btn btn-primario">+ Novo Chamado</a>
+                {% if current_user.is_authenticated %}
+                <div class="usuario-info">
+                    <span class="usuario-nome">{{ current_user.nome }}</span>
+                    <span class="usuario-papel">{{ current_user.papel }}</span>
+                    <a href="{{ url_for('alterar_senha') }}" class="link-sair">Alterar senha</a>
+                    <a href="{{ url_for('logout') }}" class="link-sair">Sair</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <main class="container conteudo">
+        {% with mensagens = get_flashed_messages(with_categories=true) %}
+            {% if mensagens %}
+                <div class="flash-wrapper">
+                    {% for categoria, mensagem in mensagens %}
+                        <div class="flash flash-{{ categoria }}">{{ mensagem }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block conteudo %}{% endblock %}
+    </main>
+
+    <footer class="rodape">
+        <div class="container">
+            <p>Sistema de Abertura de Chamados &middot; construído com Flask + PostgreSQL</p>
+        </div>
+    </footer>
+</body>
+</html>
