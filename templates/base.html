@@ -12,7 +12,7 @@
         <div class="container topbar-inner">
             <a href="{{ url_for('index') }}" class="logo">
                 <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Marista" class="logo-img">
-                <span>Sistema de Chamados</span>
+                <span>Relação de Chamados</span>
             </a>
             <div class="topbar-acoes">
                 {% if current_user.is_authenticated and current_user.papel in ('admin', 'admin_rh') %}
@@ -47,7 +47,7 @@
 
     <footer class="rodape">
         <div class="container">
-            <p>Sistema de Abertura de Chamados &middot; construído com Flask + PostgreSQL</p>
+            <p>syschamados.space - v3.0 - Sistema de Abertura de Chamados &middot; Colégio Marista João Paulo II - Tecnologia Educacional</p>
         </div>
     </footer>
 </body>
