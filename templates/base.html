@@ -12,7 +12,7 @@
         <div class="container topbar-inner">
             <a href="{{ url_for('index') }}" class="logo">
                 <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Marista" class="logo-img">
-                <span>Relação de Chamados</span>
+                <span>Colégio Marista João Paulo II</span>
             </a>
             <div class="topbar-acoes">
                 {% if current_user.is_authenticated and current_user.papel in ('admin', 'admin_rh') %}
