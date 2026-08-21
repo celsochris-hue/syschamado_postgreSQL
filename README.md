@@ -148,17 +148,18 @@ cadastrar — o **primeiro usuário criado vira administrador automaticamente**.
 python seed.py
 ```
 
-Isso cria três usuários de teste:
+Isso cria quatro usuários de teste:
 - **Admin:** admin@empresa.com / senha `admin123`
 - **Técnico:** tecnico@empresa.com / senha `tecnico123`
 - **RH:** rh@empresa.com / senha `rh123`
+- **Admin RH:** admin_rh@empresa.com / senha `admin_rh123`
 
 e quatro chamados de exemplo (um de cada status, um já atribuído ao técnico de teste
 e um do RH para validar a visibilidade restrita).
 
 ## Papéis de usuário e permissões
 
-O sistema tem quatro papéis, com regras de acesso diferentes:
+O sistema tem cinco papéis, com regras de acesso diferentes:
 
 ### usuario (papel padrão)
 - Pode **abrir novos chamados** normalmente (com anexos de evidência)
@@ -174,25 +175,37 @@ O sistema tem quatro papéis, com regras de acesso diferentes:
 
 ### tecnico
 - Mesmas permissões de `usuario`, **mais**: visualiza **todos** os chamados de todos os
-  usuários (exceto os da área de RH, ver abaixo), pode alterar status, adicionar anexos,
-  atribuir responsável e excluir chamados
+  usuários **fora da área de RH**, pode alterar status, adicionar anexos, atribuir
+  responsável e excluir chamados nesses mesmos chamados
 - Pode ser selecionado como responsável por um chamado
+- **Não enxerga** chamados da área de RH — eles ficam invisíveis na listagem, nos
+  contadores, nos relatórios e no link direto
 
 ### rh
-- Mesmas permissões de `tecnico` para chamados fora da área de RH
-- **Visualiza e gerencia exclusivamente os chamados da área de RH** (setor "RH" ou
-  "Recursos Humanos"). Esses chamados ficam invisíveis para os demais perfis, inclusive
-  `tecnico` e `usuario` — só aparecem para `rh` e `admin`
+- Visualiza **apenas os chamados da área de RH** + os que ele **próprio abriu** em outros
+  setores. Não enxerga chamados de outros setores abertos por outros usuários.
+- Pode alterar status, adicionar anexos, atribuir responsável e excluir os chamados
+  do RH, bem como os próprios que ele abriu
 - Pode ser selecionado como responsável por chamados de RH
 
-### admin
-- Todas as permissões de `tecnico` e `rh`, mais acesso ao painel `/admin/usuarios`
-- Único perfil (junto com `rh`) que enxerga os chamados da área de RH
+### admin_rh (administrador restrito ao RH)
+- É um administrador com escopo limitado à **área de RH**: visualiza e gerencia
+  **apenas** os chamados cujo setor é "RH" ou "Recursos Humanos"
+- Tem acesso ao painel `/admin/usuarios`, mas apenas para gerenciar contas da própria
+  área (`rh` e `admin_rh`); não pode promover ninguém a `admin` geral nem editar
+  contas de outros setores
+- **Não tem acesso a chamados de outros setores**, mesmo que ele próprio os abra —
+  esses ficam invisíveis na listagem e nos relatórios
 
-> Em resumo: **chamados fora do RH** são visíveis/gerenciáveis por `tecnico`, `rh` e
-> `admin`. **Chamados do RH** ficam restritos apenas a `rh` e `admin`. O papel
-> `usuario` continua restrito aos próprios chamados, em modo de leitura após a
-> abertura.
+### admin (administrador geral)
+- **Visualiza e gerencia todos os chamados** registrados, do RH ou de qualquer setor
+- Tem acesso completo ao painel `/admin/usuarios`, com permissão para criar,
+  promover, desativar e excluir qualquer conta
+
+> Em resumo: o `admin` enxerga e gerencia **tudo**. O `admin_rh` enxerga e gerencia
+> **apenas RH**. O `rh` enxerga **apenas RH + os próprios** (em qualquer setor) e
+> gerencia o que enxerga. O `tecnico` enxerga tudo **fora do RH** e gerencia o que
+> enxerga. O `usuario` continua restrito aos próprios chamados, em modo leitura.
 
 ## Área de RH — visibilidade restrita
 
@@ -200,29 +213,35 @@ Chamados cujo campo **Setor** seja informado como `RH` ou `Recursos Humanos`
 (case-insensitive) são tratados como **chamados da área de RH** e ficam sujeitos a
 regras especiais:
 
-- Só são exibidos na listagem e nos contadores para perfis `rh` e `admin` — os demais
-  perfis (incluindo `tecnico` e `usuario`) **não veem referência alguma** desses chamados
+- São exibidos na listagem e nos contadores para os perfis `rh`, `admin_rh` e `admin`
+  — os demais perfis (incluindo `tecnico` e `usuario`) **não veem referência alguma**
+  desses chamados
 - Os PDFs/Excels exportados herdam o mesmo filtro: só incluem chamados de RH quando o
-  solicitante da exportação é `rh` ou `admin`
+  solicitante da exportação é `rh`, `admin_rh` ou `admin`
 - O link direto `/chamado/<id>` também é bloqueado: se um usuário sem permissão tentar
   acessar, recebe um aviso e é redirecionado
 - As ações de **alterar status, atribuir responsável, adicionar/excluir anexos e excluir
-  o chamado** ficam disponíveis apenas para `rh` e `admin` quando o chamado é do RH —
-  um `tecnico` comum, mesmo autenticado, não consegue executar essas operações
-- A atribuição de responsável em chamados do RH aceita apenas perfis `rh` ou `admin`
-  (técnicos não podem ser designados para chamados de RH)
+  o chamado** ficam disponíveis apenas para `rh`, `admin_rh` e `admin` quando o chamado
+  é do RH — um `tecnico` comum, mesmo autenticado, não consegue executar essas operações
+- A atribuição de responsável em chamados do RH aceita apenas perfis `rh`, `admin_rh`
+  ou `admin` (técnicos não podem ser designados para chamados de RH)
 
 Para criar um chamado de RH, basta abrir um chamado normalmente e digitar "RH" ou
 "Recursos Humanos" no campo **Setor**. O sistema reconhece automaticamente.
 
 O **primeiro usuário cadastrado no sistema vira administrador automaticamente**. A partir
-daí, o admin acessa **"Administração"** no topo da página para:
+daí, o `admin` (e também o `admin_rh`, com escopo restrito ao RH) acessa
+**"Administração"** no topo da página para:
 
-- Alterar o papel de qualquer usuário (ex: promover alguém a "técnico" para que ele possa
-  ver todos os chamados e receber atribuições)
+- Alterar o papel de qualquer usuário sob seu escopo (ex: promover alguém a "técnico"
+  para que ele possa ver todos os chamados fora do RH e receber atribuições)
 - Ativar ou desativar contas (uma conta desativada não consegue mais fazer login)
 - Excluir contas que nunca tiveram chamados, atribuições ou alterações de status vinculadas
   (caso contrário, o sistema pede para desativar em vez de excluir, preservando o histórico)
+
+> O `admin_rh` só visualiza e gerencia contas com papel `rh` ou `admin_rh`, e não pode
+> promover ninguém a `admin` geral. As demais alterações de papel são feitas pelo
+> `admin` geral.
 
 Na tela de detalhe de cada chamado, técnicos e administradores podem atribuir (ou remover)
 um técnico responsável através do menu **"Responsável Técnico"**. Ao atribuir, o técnico

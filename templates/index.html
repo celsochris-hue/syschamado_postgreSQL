@@ -3,7 +3,7 @@
 
 {% block conteudo %}
 <div class="cabecalho-pagina">
-    <h1>Relação de Chamados</h1>
+    <h1>Chamados e Demandas</h1>
     <div class="acoes-exportar">
         <a href="{{ url_for('exportar_excel', status=status_filtro, busca=busca) }}" class="btn btn-secundario">⬇ Excel</a>
         <a href="{{ url_for('exportar_pdf', status=status_filtro, busca=busca) }}" class="btn btn-secundario">⬇ PDF</a>
@@ -16,7 +16,11 @@
 </p>
 {% endif %}
 
-{% if current_user.papel in ("rh", "admin") %}
+{% if current_user.papel == "admin_rh" %}
+<p class="texto-vazio" style="margin: -10px 0 16px;">
+    Mostrando apenas os chamados da área de RH.
+</p>
+{% elif current_user.papel in ("rh", "admin") %}
 <p class="texto-vazio" style="margin: -10px 0 16px;">
     Você tem acesso aos chamados da área de RH (visíveis apenas para perfis RH e administrador).
 </p>

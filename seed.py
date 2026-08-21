@@ -1,10 +1,12 @@
 """
-Script opcional para popular o banco com um usuário e alguns chamados de exemplo.
+Script opcional para popular o banco com usuários e chamados de exemplo.
 Execute com: python seed.py
 
-Usuário de teste criado:
-  E-mail: admin@empresa.com
-  Senha:  admin123
+Usuários de teste criados (todos com senha já definida):
+  - admin@empresa.com     (admin)     senha: admin123
+  - tecnico@empresa.com   (tecnico)   senha: tecnico123
+  - rh@empresa.com        (rh)        senha: rh123
+  - admin_rh@empresa.com  (admin_rh)  senha: admin_rh123
 """
 from datetime import timedelta
 from app import app, db, User, Chamado, HistoricoStatus, agora_br
@@ -74,6 +76,14 @@ with app.app_context():
         db.session.add(rh)
         db.session.flush()
         print("Usuário RH criado -> login: rh@empresa.com | senha: rh123")
+
+    admin_rh = User.query.filter_by(email="admin_rh@empresa.com").first()
+    if not admin_rh:
+        admin_rh = User(nome="Patrícia Melo", email="admin_rh@empresa.com", papel="admin_rh")
+        admin_rh.set_senha("admin_rh123")
+        db.session.add(admin_rh)
+        db.session.flush()
+        print("Usuário Admin RH criado -> login: admin_rh@empresa.com | senha: admin_rh123")
 
     for i, dados in enumerate(exemplos):
         chamado = Chamado(

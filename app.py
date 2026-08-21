@@ -121,12 +121,17 @@ login_manager.login_message_category = "aviso"
 # ---------------------------------------------------------------------------
 STATUS_OPCOES = ["Aberto", "Suspenso", "Encerrado"]
 PRIORIDADE_OPCOES = ["Baixa", "Média", "Alta", "Urgente"]
-PAPEL_OPCOES = ["usuario", "tecnico", "rh", "admin"]
+# Papéis disponíveis. 'admin_rh' é um administrador restrito à área de RH
+# (vê e gerencia apenas chamados cujo setor é RH/Recursos Humanos). O 'rh'
+# comum continua sendo operacional, mas com escopo limitado (vê apenas RH
+# mais os chamados que ele próprio abriu em outros setores). 'admin' tem
+# acesso total a todos os chamados.
+PAPEL_OPCOES = ["usuario", "tecnico", "rh", "admin_rh", "admin"]
 
 # Setores que identificam um chamado como sendo da área de RH.
 # Comparação case-insensitive: qualquer setor que contenha esses termos é
 # considerado "área de RH" e fica visível apenas para usuários com papel
-# 'rh' ou 'admin' (ver `pode_acessar_chamado`).
+# 'rh', 'admin_rh' ou 'admin' (ver `pode_acessar_chamado`).
 SETOR_RH = {"rh", "recursos humanos"}
 
 
@@ -149,6 +154,9 @@ class User(UserMixin, db.Model):
 
     def is_admin(self):
         return self.papel == "admin"
+
+    def is_admin_rh(self):
+        return self.papel == "admin_rh"
 
 
 class Chamado(db.Model):
@@ -225,70 +233,91 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
-def admin_required(f):
-    """Restringe o acesso da rota apenas a usuários com papel 'admin'."""
-    @wraps(f)
-    def decorated_view(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.is_admin():
-            flash("Acesso restrito a administradores.", "erro")
-            return redirect(url_for("index"))
-        return f(*args, **kwargs)
-    return decorated_view
-
-
 def tecnico_ou_admin_required(f):
-    """Restringe o acesso da rota a usuários com papel 'tecnico', 'rh' ou
-    'admin'. Usuários com papel 'usuario' só podem abrir chamados e consultar
-    o status dos chamados que eles próprios cadastraram — não podem alterar
-    status, atribuir responsável, anexar novas evidências ou excluir chamados.
+    """Restringe o acesso da rota a usuários com papel 'tecnico', 'rh',
+    'admin_rh' ou 'admin'. Usuários com papel 'usuario' só podem abrir
+    chamados e consultar o status dos chamados que eles próprios cadastraram
+    — não podem alterar status, atribuir responsável, anexar novas evidências
+    ou excluir chamados.
 
     ATENÇÃO: este decorator não aplica sozinho a regra de RH — apenas libera
     o acesso aos papéis "técnicos". As rotas de gerenciamento devem chamar
-    `exige_perfil_para_area(chamado)` para impedir que um 'tecnico' comum
-    altere/exclua chamados da área de RH (que continuam exigindo 'rh' ou
-    'admin')."""
+    `pode_gerenciar_chamado(chamado)` para impedir que um 'tecnico' comum
+    altere/exclua chamados da área de RH (que continuam exigindo 'rh',
+    'admin_rh' ou 'admin') e para garantir que um 'rh'/'admin_rh' só
+    gerencie chamados da área dele (ou os que ele próprio abriu)."""
     @wraps(f)
     def decorated_view(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.papel not in ("tecnico", "rh", "admin"):
+        if not current_user.is_authenticated or current_user.papel not in (
+            "tecnico", "rh", "admin_rh", "admin",
+        ):
             flash("Esta ação é restrita a técnicos, RH ou administradores.", "erro")
             return redirect(request.referrer or url_for("index"))
         return f(*args, **kwargs)
     return decorated_view
 
 
-def exige_perfil_para_area(chamado):
-    """Retorna True se o usuário atual tem permissão para gerenciar este
-    chamado respeitando a área dele. Chamados do RH exigem 'rh' ou 'admin';
-    chamados comuns exigem 'tecnico', 'rh' ou 'admin'.
+def pode_gerenciar_chamado(chamado):
+    """Retorna True se o usuário atual tem permissão para GERENCIAR este
+    chamado (alterar status, anexar, atribuir, excluir).
 
-    O decorator `tecnico_ou_admin_required` já garante o 'tecnico'/'rh'/'admin'
-    como piso. Aqui só aplicamos a regra extra do RH."""
-    if not chamado.eh_rh():
+    Regras:
+    - admin: gerencia tudo.
+    - admin_rh: gerencia apenas chamados do RH.
+    - rh: gerencia chamados do RH + os próprios que abriu em qualquer setor.
+    - tecnico: gerencia chamados fora do RH.
+    - usuario: nunca gerencia.
+    """
+    if current_user.papel == "admin":
         return True
-    return current_user.papel in ("rh", "admin")
+    if current_user.papel == "admin_rh":
+        return chamado.eh_rh()
+    if current_user.papel == "rh":
+        # Chamados do RH sempre; fora do RH apenas os próprios.
+        return chamado.eh_rh() or chamado.usuario_id == current_user.id
+    if current_user.papel == "tecnico":
+        return not chamado.eh_rh()
+    return False
 
 
 def pode_acessar_chamado(chamado):
-    """Regras de acesso a um chamado:
+    """Regras de acesso (visualização) a um chamado:
 
-    - Chamados da área de RH (setor "RH" ou "Recursos Humanos") são restritos:
-      apenas usuários com papel 'rh' ou 'admin' podem visualizá-los/gerenciá-los.
-      Demais usuários (incluindo 'tecnico') não têm acesso, mesmo que tenham
-      aberto o próprio chamado.
-    - Para chamados fora do RH: usuários com papel 'tecnico' ou 'admin' acessam
-      todos; usuários com papel 'usuario' só acessam os próprios.
+    - admin: visualiza TODOS os chamados (do RH ou de qualquer setor).
+    - admin_rh: visualiza APENAS chamados da área de RH.
+    - rh: visualiza chamados da área de RH + os que ele próprio abriu em
+      outros setores. Não enxerga chamados abertos por outras pessoas fora
+      do RH.
+    - tecnico: visualiza todos os chamados fora do RH; não enxerga os do RH.
+    - usuario: visualiza apenas os próprios chamados (e mesmo os próprios
+      do RH continuam restritos ao escopo do RH — ver regra de 'rh').
+
+    Chamados da área de RH (setor "RH" ou "Recursos Humanos") são sempre
+    invisíveis para perfis 'tecnico' e 'usuario' (a menos que o 'usuario'
+    seja o autor e o papel seja 'rh').
     """
-    if chamado.eh_rh():
-        return current_user.papel in ("rh", "admin")
-
-    if current_user.papel in ("tecnico", "admin"):
+    # admin enxerga tudo, sem exceção.
+    if current_user.papel == "admin":
         return True
+
+    # admin_rh só enxerga RH.
+    if current_user.papel == "admin_rh":
+        return chamado.eh_rh()
+
+    # Chamados do RH: só 'rh' e 'admin' (admin já tratado acima) enxergam.
+    if chamado.eh_rh():
+        return current_user.papel == "rh"
+
+    # Chamados fora do RH:
+    if current_user.papel == "tecnico":
+        return True
+    if current_user.papel == "rh":
+        # 'rh' enxerga chamados fora do RH apenas se ele próprio abriu.
+        return chamado.usuario_id == current_user.id
     if current_user.papel == "usuario":
         return chamado.usuario_id == current_user.id
-    # Papel 'rh' enxerga normalmente chamados fora do RH (regra de menor
-    # surpresa: um usuário de RH continua podendo abrir/consultar chamados
-    # comuns).
-    return True
+
+    return False
 
 
 def gerar_senha_temporaria(tamanho=10):
@@ -298,14 +327,17 @@ def gerar_senha_temporaria(tamanho=10):
 
 
 def usuarios_atribuiveis():
-    """Retorna usuários que podem ser designados como responsáveis por um chamado
-    (técnicos, RH e administradores), ordenados por nome.
+    """Retorna usuários que podem ser designados como responsáveis por um
+    chamado (técnicos, RH, admin_rh e admin), ordenados por nome.
 
-    Para chamados da área de RH, a UI filtra adicionalmente para mostrar apenas
-    'rh' e 'admin' (ver `usuarios_atribuiveis_para_chamado`)."""
+    Para chamados da área de RH, a UI filtra adicionalmente para mostrar
+    apenas 'rh', 'admin_rh' e 'admin' (ver `usuarios_atribuiveis_para_chamado`)."""
     return (
         User.query
-        .filter(User.papel.in_(["tecnico", "rh", "admin"]), User.ativo.is_(True))
+        .filter(
+            User.papel.in_(["tecnico", "rh", "admin_rh", "admin"]),
+            User.ativo.is_(True),
+        )
         .order_by(User.nome)
         .all()
     )
@@ -313,8 +345,11 @@ def usuarios_atribuiveis():
 
 def usuarios_atribuiveis_para_chamado(chamado):
     """Lista de usuários atribuíveis respeitando a área do chamado:
-    chamados de RH só podem ser atribuídos a 'rh' ou 'admin'."""
-    papeis = ("rh", "admin") if chamado.eh_rh() else ("tecnico", "rh", "admin")
+    chamados de RH só podem ser atribuídos a 'rh', 'admin_rh' ou 'admin'."""
+    if chamado.eh_rh():
+        papeis = ("rh", "admin_rh", "admin")
+    else:
+        papeis = ("tecnico", "rh", "admin_rh", "admin")
     return (
         User.query
         .filter(User.papel.in_(papeis), User.ativo.is_(True))
@@ -348,28 +383,47 @@ def salvar_anexo(arquivo, chamado_id):
 
 
 def filtrar_chamados():
-    """Aplica os filtros de status/busca vindos da querystring e retorna a lista.
-    Regras de visibilidade combinadas:
+    """Aplica os filtros de status/busca vindos da querystring e retorna a
+    lista de chamados visíveis para o usuário atual.
 
-    - Chamados do RH (setor 'RH'/'Recursos Humanos') só aparecem para perfis
-      'rh' e 'admin'. Os demais papéis (incluindo 'tecnico') não veem esses
-      chamados na listagem, nos contadores, nem nos relatórios exportados.
-    - Usuários com papel 'usuario' só visualizam os chamados que eles próprios
-      abriram (e nunca os do RH, mesmo sendo o autor — RH é restrito por área).
-    - 'tecnico' e 'admin' enxergam todos os chamados fora do RH.
-    - 'rh' enxerga chamados fora do RH normalmente (regra de menor surpresa).
+    Regras de visibilidade combinadas:
+    - admin: enxerga todos os chamados (do RH ou de qualquer setor).
+    - admin_rh: enxerga APENAS chamados do RH.
+    - rh: enxerga chamados do RH + os próprios que abriu em outros setores.
+    - tecnico: enxerga todos fora do RH; não enxerga os do RH.
+    - usuario: enxerga apenas os próprios chamados (e mesmo esses ficam
+      sujeitos à regra de área do RH).
     """
     status_filtro = request.args.get("status", "Todos")
     busca = request.args.get("busca", "").strip()
 
     query = Chamado.query
 
-    # Regra 1: chamados do RH só são visíveis para 'rh' e 'admin'.
-    # A comparação é feita com `func.lower` para tolerar variações de caixa
-    # ("RH", "Rh", "recursos humanos" etc.). Chamados sem setor (NULL) nunca
-    # são considerados de RH e continuam visíveis normalmente.
-    if current_user.papel not in ("rh", "admin"):
-        setores_rh_lower = [s.lower() for s in SETOR_RH]
+    setores_rh_lower = [s.lower() for s in SETOR_RH]
+
+    if current_user.papel == "admin":
+        # Sem restrição de área.
+        pass
+
+    elif current_user.papel == "admin_rh":
+        # Apenas chamados do RH.
+        query = query.filter(
+            db.func.lower(Chamado.setor).in_(setores_rh_lower)
+        )
+
+    elif current_user.papel == "rh":
+        # Chamados do RH OU os que o próprio usuário abriu (em qualquer
+        # setor). Como o autor dos chamados do RH já é sempre alguém com
+        # papel 'rh' (na prática), o OR cobre os dois casos.
+        query = query.filter(
+            db.or_(
+                db.func.lower(Chamado.setor).in_(setores_rh_lower),
+                Chamado.usuario_id == current_user.id,
+            )
+        )
+
+    elif current_user.papel == "tecnico":
+        # Tudo fora do RH (chamados sem setor são permitidos).
         query = query.filter(
             db.or_(
                 Chamado.setor.is_(None),
@@ -377,9 +431,15 @@ def filtrar_chamados():
             )
         )
 
-    # Regra 2: 'usuario' comum só vê os próprios chamados.
-    if current_user.papel == "usuario":
-        query = query.filter_by(usuario_id=current_user.id)
+    elif current_user.papel == "usuario":
+        # Apenas os próprios chamados, respeitando a regra de área.
+        query = query.filter(
+            Chamado.usuario_id == current_user.id,
+            db.or_(
+                Chamado.setor.is_(None),
+                ~db.func.lower(Chamado.setor).in_(setores_rh_lower),
+            ),
+        )
 
     if status_filtro in STATUS_OPCOES:
         query = query.filter_by(status=status_filtro)
@@ -538,23 +598,40 @@ def index():
     busca = request.args.get("busca", "")
 
     # Os contadores (cards de "Todos / Abertos / Suspensos / Encerrados")
-    # precisam refletir as MESMAS regras de visibilidade aplicadas à listagem:
-    # - Chamados do RH não devem ser contabilizados para perfis que não podem
-    #   vê-los (senão o número fica diferente da lista exibida, o que confunde).
-    # - Para 'usuario', contam apenas os próprios chamados.
+    # precisam refletir as MESMAS regras de visibilidade aplicadas à
+    # listagem (ver `filtrar_chamados`). Reaplicamos aqui a lógica para que
+    # o número de cada status bata exatamente com a lista exibida.
     base_query = Chamado.query
+    setores_rh_lower = [s.lower() for s in SETOR_RH]
 
-    if current_user.papel not in ("rh", "admin"):
-        setores_rh_lower = [s.lower() for s in SETOR_RH]
+    if current_user.papel == "admin":
+        pass
+    elif current_user.papel == "admin_rh":
+        base_query = base_query.filter(
+            db.func.lower(Chamado.setor).in_(setores_rh_lower)
+        )
+    elif current_user.papel == "rh":
+        base_query = base_query.filter(
+            db.or_(
+                db.func.lower(Chamado.setor).in_(setores_rh_lower),
+                Chamado.usuario_id == current_user.id,
+            )
+        )
+    elif current_user.papel == "tecnico":
         base_query = base_query.filter(
             db.or_(
                 Chamado.setor.is_(None),
                 ~db.func.lower(Chamado.setor).in_(setores_rh_lower),
             )
         )
-
-    if current_user.papel == "usuario":
-        base_query = base_query.filter_by(usuario_id=current_user.id)
+    elif current_user.papel == "usuario":
+        base_query = base_query.filter(
+            Chamado.usuario_id == current_user.id,
+            db.or_(
+                Chamado.setor.is_(None),
+                ~db.func.lower(Chamado.setor).in_(setores_rh_lower),
+            ),
+        )
 
     contadores = {
         "Todos": base_query.count(),
@@ -657,12 +734,10 @@ def detalhe_chamado(chamado_id):
         flash("Você não tem permissão para visualizar este chamado.", "erro")
         return redirect(url_for("index"))
 
-    # Quem pode gerenciar (status/anexos/atribuição/exclusão) também passa a
-    # depender da área do chamado: no RH, só 'rh' e 'admin'.
-    if chamado.eh_rh():
-        pode_gerenciar = current_user.papel in ("rh", "admin")
-    else:
-        pode_gerenciar = current_user.papel in ("tecnico", "admin", "rh")
+    # Quem pode gerenciar (status/anexos/atribuição/exclusão) também passa
+    # a depender da área do chamado e do papel do usuário (ver
+    # `pode_gerenciar_chamado`).
+    pode_gerenciar = pode_gerenciar_chamado(chamado)
 
     return render_template(
         "detalhe.html",
@@ -679,8 +754,8 @@ def detalhe_chamado(chamado_id):
 def atualizar_status(chamado_id):
     chamado = Chamado.query.get_or_404(chamado_id)
 
-    if not pode_acessar_chamado(chamado) or not exige_perfil_para_area(chamado):
-        flash("Apenas perfis de RH ou administradores podem alterar chamados da área de RH.", "erro")
+    if not pode_acessar_chamado(chamado) or not pode_gerenciar_chamado(chamado):
+        flash("Você não tem permissão para alterar este chamado.", "erro")
         return redirect(url_for("index"))
 
     novo_status = request.form.get("status")
@@ -731,8 +806,8 @@ def atualizar_status(chamado_id):
 def anexar_arquivo(chamado_id):
     chamado = Chamado.query.get_or_404(chamado_id)
 
-    if not pode_acessar_chamado(chamado) or not exige_perfil_para_area(chamado):
-        flash("Apenas perfis de RH ou administradores podem anexar arquivos a chamados da área de RH.", "erro")
+    if not pode_acessar_chamado(chamado) or not pode_gerenciar_chamado(chamado):
+        flash("Você não tem permissão para anexar arquivos a este chamado.", "erro")
         return redirect(url_for("index"))
 
     arquivos = request.files.getlist("anexos")
@@ -787,8 +862,8 @@ def excluir_anexo(chamado_id, anexo_id):
     if anexo.chamado_id != chamado_id:
         abort(404)
 
-    if not pode_acessar_chamado(anexo.chamado) or not exige_perfil_para_area(anexo.chamado):
-        flash("Apenas perfis de RH ou administradores podem remover anexos de chamados da área de RH.", "erro")
+    if not pode_acessar_chamado(anexo.chamado) or not pode_gerenciar_chamado(anexo.chamado):
+        flash("Você não tem permissão para remover este anexo.", "erro")
         return redirect(url_for("index"))
 
     caminho = os.path.join(app.config["UPLOAD_FOLDER"], anexo.nome_arquivo)
@@ -807,8 +882,8 @@ def excluir_anexo(chamado_id, anexo_id):
 def excluir_chamado(chamado_id):
     chamado = Chamado.query.get_or_404(chamado_id)
 
-    if not pode_acessar_chamado(chamado) or not exige_perfil_para_area(chamado):
-        flash("Apenas perfis de RH ou administradores podem excluir chamados da área de RH.", "erro")
+    if not pode_acessar_chamado(chamado) or not pode_gerenciar_chamado(chamado):
+        flash("Você não tem permissão para excluir este chamado.", "erro")
         return redirect(url_for("index"))
 
     for anexo in chamado.anexos:
@@ -828,9 +903,10 @@ def excluir_chamado(chamado_id):
 def atribuir_responsavel(chamado_id):
     chamado = Chamado.query.get_or_404(chamado_id)
 
-    # Bloqueio de área: chamado do RH só pode ser gerenciado por 'rh'/'admin'.
-    if chamado.eh_rh() and current_user.papel not in ("rh", "admin"):
-        flash("Apenas perfis de RH ou administradores podem gerenciar chamados da área de RH.", "erro")
+    # Bloqueio de área/papel: o usuário precisa poder gerenciar este
+    # chamado de acordo com as regras gerais.
+    if not pode_gerenciar_chamado(chamado):
+        flash("Você não tem permissão para atribuir responsável a este chamado.", "erro")
         return redirect(url_for("index"))
 
     responsavel_id = request.form.get("responsavel_id", "").strip()
@@ -842,12 +918,12 @@ def atribuir_responsavel(chamado_id):
         return redirect(url_for("detalhe_chamado", chamado_id=chamado_id))
 
     responsavel = User.query.get_or_404(int(responsavel_id))
-    # Chamados do RH só aceitam responsáveis 'rh' ou 'admin'.
+    # Chamados do RH só aceitam responsáveis 'rh', 'admin_rh' ou 'admin'.
     if chamado.eh_rh():
-        papeis_validos = ("rh", "admin")
+        papeis_validos = ("rh", "admin_rh", "admin")
         msg_erro = "Chamados da área de RH só podem ser atribuídos a usuários do RH ou administradores."
     else:
-        papeis_validos = ("tecnico", "rh", "admin")
+        papeis_validos = ("tecnico", "rh", "admin_rh", "admin")
         msg_erro = "Só é possível atribuir chamados a técnicos, RH ou administradores."
 
     if responsavel.papel not in papeis_validos:
@@ -874,19 +950,67 @@ def atribuir_responsavel(chamado_id):
 # ---------------------------------------------------------------------------
 # Painel de administração
 # ---------------------------------------------------------------------------
+def _admin_pode_gerenciar(usuario_alvo):
+    """Verifica se o administrador atual pode gerenciar o usuário alvo.
+
+    - admin geral: pode tudo.
+    - admin_rh: só pode gerenciar contas do RH (rh/admin_rh). Não pode
+      alterar/excluir contas de 'admin' nem contas de 'tecnico'/'usuario'
+      que sejam de outros setores.
+    """
+    if current_user.is_admin():
+        return True
+    if current_user.is_admin_rh():
+        return usuario_alvo.papel in ("rh", "admin_rh")
+    return False
+
+
+def _admin_required_ou_admin_rh(f):
+    """Decorator: permite o acesso a 'admin' (geral) e 'admin_rh' (restrito
+    ao RH). Equivalente ao `admin_required`, mas abre a porta para o
+    `admin_rh` — as checagens finas de escopo continuam sendo feitas
+    dentro de cada rota via `_admin_pode_gerenciar`."""
+    @wraps(f)
+    def decorated_view(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.papel not in ("admin", "admin_rh"):
+            flash("Acesso restrito a administradores.", "erro")
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return decorated_view
+
+
 @app.route("/admin/usuarios")
 @login_required
-@admin_required
+@_admin_required_ou_admin_rh
 def admin_usuarios():
-    usuarios = User.query.order_by(User.data_criacao).all()
-    return render_template("admin_usuarios.html", usuarios=usuarios, papel_opcoes=PAPEL_OPCOES)
+    # admin: vê todos. admin_rh: vê apenas contas da área RH.
+    query = User.query
+    if current_user.is_admin_rh():
+        query = query.filter(User.papel.in_(["rh", "admin_rh"]))
+    usuarios = query.order_by(User.data_criacao).all()
+    # admin_rh não pode promover ninguém a 'admin'.
+    papeis_disponiveis = (
+        ["usuario", "tecnico", "rh", "admin_rh", "admin"]
+        if current_user.is_admin()
+        else ["rh", "admin_rh"]
+    )
+    return render_template(
+        "admin_usuarios.html",
+        usuarios=usuarios,
+        papel_opcoes=papeis_disponiveis,
+        escopo_rh=current_user.is_admin_rh(),
+    )
 
 
 @app.route("/admin/usuarios/<int:user_id>/status", methods=["POST"])
 @login_required
-@admin_required
+@_admin_required_ou_admin_rh
 def admin_alternar_status(user_id):
     usuario = User.query.get_or_404(user_id)
+
+    if not _admin_pode_gerenciar(usuario):
+        flash("Você não tem permissão para alterar esta conta.", "erro")
+        return redirect(url_for("admin_usuarios"))
 
     if usuario.id == current_user.id:
         flash("Você não pode desativar a própria conta.", "erro")
@@ -901,16 +1025,29 @@ def admin_alternar_status(user_id):
 
 @app.route("/admin/usuarios/<int:user_id>/papel", methods=["POST"])
 @login_required
-@admin_required
+@_admin_required_ou_admin_rh
 def admin_alterar_papel(user_id):
     usuario = User.query.get_or_404(user_id)
     novo_papel = request.form.get("papel")
+
+    if not _admin_pode_gerenciar(usuario):
+        flash("Você não tem permissão para alterar esta conta.", "erro")
+        return redirect(url_for("admin_usuarios"))
 
     if novo_papel not in PAPEL_OPCOES:
         flash("Papel inválido.", "erro")
         return redirect(url_for("admin_usuarios"))
 
-    if usuario.id == current_user.id and novo_papel != "admin":
+    # admin_rh só pode atribuir papéis da área RH.
+    if current_user.is_admin_rh() and novo_papel not in ("rh", "admin_rh"):
+        flash(
+            "Administrador do RH só pode atribuir papéis 'rh' ou 'admin_rh'.",
+            "erro",
+        )
+        return redirect(url_for("admin_usuarios"))
+
+    if usuario.id == current_user.id and novo_papel not in ("admin", "admin_rh"):
+        # Cada perfil protege o seu próprio acesso de administrador.
         flash("Você não pode remover seu próprio acesso de administrador.", "erro")
         return redirect(url_for("admin_usuarios"))
 
@@ -922,9 +1059,13 @@ def admin_alterar_papel(user_id):
 
 @app.route("/admin/usuarios/<int:user_id>/excluir", methods=["POST"])
 @login_required
-@admin_required
+@_admin_required_ou_admin_rh
 def admin_excluir_usuario(user_id):
     usuario = User.query.get_or_404(user_id)
+
+    if not _admin_pode_gerenciar(usuario):
+        flash("Você não tem permissão para excluir esta conta.", "erro")
+        return redirect(url_for("admin_usuarios"))
 
     if usuario.id == current_user.id:
         flash("Você não pode excluir a própria conta.", "erro")

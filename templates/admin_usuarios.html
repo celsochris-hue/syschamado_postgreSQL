@@ -7,6 +7,13 @@
     <a href="{{ url_for('index') }}" class="link-voltar">&larr; Voltar para os chamados</a>
 </div>
 
+{% if escopo_rh %}
+<div class="aviso-escopo" style="margin-bottom: 14px; padding: 10px 12px; background: #eef0fb; border-left: 4px solid #4F46E5;">
+    Você está gerenciando apenas as contas da <strong>área de RH</strong>
+    (papéis <code>rh</code> e <code>admin_rh</code>). Para administrar todos os usuários, entre com uma conta de administrador geral.
+</div>
+{% endif %}
+
 <div class="tabela-wrapper">
     <table class="tabela">
         <thead>
